@@ -33,7 +33,7 @@ def test_healthz_ok() -> None:
     assert body["ingest"] == "ok"
     assert body["normalize"] == "ok"
     assert body["fanout"] == "ok"
-    assert body["realtime"] == "stub"
+    assert body["realtime"] == "ok"
 
 
 def test_root_points_at_healthz() -> None:
@@ -46,3 +46,5 @@ def test_root_points_at_healthz() -> None:
     assert body["events"] == "/events"
     assert body["ingest"] == "/ingest/status"
     assert body["fanout"] == "/fanout/status"
+    assert body["realtime"] == "/realtime/status"
+    assert body["ws"] == "/ws/events"

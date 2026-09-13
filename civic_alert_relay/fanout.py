@@ -3,7 +3,7 @@
 First-seen events from ingest are JSON-encoded, published on a Redis Pub/Sub
 channel, then POSTed to a webhook and/or sent through a Telegram bot when those
 are configured. Each hop is skipped when its setting is empty; failures are
-logged and do not stop ingest. WebSocket stays in #4.
+logged and do not stop ingest. WebSocket is a separate in-process path.
 """
 
 from __future__ import annotations

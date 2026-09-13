@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from civic_alert_relay import __version__, fanout
+from civic_alert_relay import __version__, fanout, realtime
 from civic_alert_relay.config import Settings
 from civic_alert_relay.normalize import (
     HazardEvent,
@@ -113,12 +113,13 @@ class IngestService:
         }
 
     def accept(self, events: list[HazardEvent]) -> list[HazardEvent]:
-        """Dedupe, keep first-seen items, and hand them to fan-out."""
+        """Dedupe, keep first-seen items, and hand them to fan-out and realtime."""
 
         emitted = select_new(events, self.seen)
         for event in emitted:
             self.recent.append(event)
             fanout.publish(event)
+            realtime.publish(event)
         return emitted
 
     async def fetch_feed(self, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
