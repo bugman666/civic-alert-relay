@@ -1,0 +1,43 @@
+services:
+  relay:
+    build: .
+    image: civic-alert-relay:local
+    container_name: civic-alert-relay
+    ports:
+      - "8080:8080"
+    environment:
+      CAR_HOST: "0.0.0.0"
+      CAR_PORT: "8080"
+      CAR_REDIS_URL: "redis://redis:6379/0"
+      CAR_DATABASE_URL: "postgresql://civic:civic@postgres:5432/civic_alert"
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Reserved for #3. The relay process does not publish yet.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  # Reserved for subscription / event history. Unused by the scaffold.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: civic
+      POSTGRES_PASSWORD: civic
+      POSTGRES_DB: civic_alert
+    volumes:
+      - civic-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  civic-pg:
