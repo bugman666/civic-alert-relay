@@ -34,8 +34,15 @@ class Settings(BaseSettings):
     seen_ids_path: str = "/tmp/civic-alert-relay-seen.json"
     recent_event_limit: int = 100
 
-    # Reserved for #3 (Redis Pub/Sub fan-out). The process does not connect yet.
+    # Redis Pub/Sub fan-out (#3). Empty ``redis_url`` skips publish.
     redis_url: str = "redis://127.0.0.1:6379/0"
+    redis_channel: str = "civic-alert-relay:events"
+
+    # Outbound channels. Empty URL / token skips that channel.
+    webhook_url: str = ""
+    webhook_timeout_seconds: float = 10.0
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     # Reserved for later subscription / event-history storage. Unused for now.
     database_url: str = "postgresql://civic:civic@127.0.0.1:5432/civic_alert"

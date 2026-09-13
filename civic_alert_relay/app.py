@@ -1,4 +1,4 @@
-"""HTTP front door: process health, ingest status, and recent events."""
+"""HTTP front door: process health, ingest / fan-out status, and recent events."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from civic_alert_relay import __version__, fanout, ingest, normalize, realtime
 from civic_alert_relay.config import Settings, get_settings
+from civic_alert_relay.fanout import FanoutService
 from civic_alert_relay.ingest import IngestService
 
 log = logging.getLogger(__name__)
@@ -25,11 +26,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     log.info("listening on %s:%s (v%s)", settings.host, settings.port, __version__)
     normalize.log_ready()
+    fanout.configure(app.state.fanout)
     fanout.log_ready(settings)
     realtime.log_ready()
+    app.state.fanout.start()
     await app.state.ingest.start()
     yield
     await app.state.ingest.stop()
+    app.state.fanout.stop()
+    fanout.configure(None)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -48,6 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.ingest = IngestService(settings)
+    app.state.fanout = FanoutService(settings)
 
     @app.get("/", include_in_schema=False)
     def root() -> JSONResponse:
@@ -58,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "health": "/healthz",
                 "events": "/events",
                 "ingest": "/ingest/status",
+                "fanout": "/fanout/status",
                 "docs": "https://github.com/bugman666/civic-alert-relay",
             }
         )
@@ -84,6 +91,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/ingest/status", include_in_schema=False)
     def ingest_status() -> JSONResponse:
         return JSONResponse(app.state.ingest.snapshot())
+
+    @app.get("/fanout/status", include_in_schema=False)
+    def fanout_status() -> JSONResponse:
+        return JSONResponse(app.state.fanout.snapshot())
 
     return app
 

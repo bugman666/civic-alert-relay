@@ -12,6 +12,10 @@ services:
       CAR_INGEST_INTERVAL_SECONDS: "60"
       CAR_SEEN_IDS_PATH: "/tmp/civic-alert-relay-seen.json"
       CAR_REDIS_URL: "redis://redis:6379/0"
+      CAR_REDIS_CHANNEL: "civic-alert-relay:events"
+      # CAR_WEBHOOK_URL: "https://example.com/hooks/civic-alert"
+      # CAR_TELEGRAM_BOT_TOKEN: ""
+      # CAR_TELEGRAM_CHAT_ID: ""
       CAR_DATABASE_URL: "postgresql://civic:civic@postgres:5432/civic_alert"
     depends_on:
       redis:
@@ -26,7 +30,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # Reserved for #3. The relay process does not publish yet.
+  # Redis Pub/Sub for #3 fan-out.
   redis:
     image: redis:7-alpine
     restart: unless-stopped

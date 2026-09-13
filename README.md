@@ -13,11 +13,11 @@
 
 ## 当前状态
 
-进程能起来，[`GET /healthz`](#如何运行) 返回正常。已按 [#2](https://github.com/bugman666/civic-alert-relay/issues/2) 轮询 USGS 地震 GeoJSON、规范化并按事件 id 去重。Redis 扇出和 WebSocket 仍是占位，见 [#3](https://github.com/bugman666/civic-alert-relay/issues/3)、[#4](https://github.com/bugman666/civic-alert-relay/issues/4)。
+进程能起来，[`GET /healthz`](#如何运行) 返回正常。已按 [#2](https://github.com/bugman666/civic-alert-relay/issues/2) 轮询 USGS 地震 GeoJSON、规范化并按事件 id 去重。首次见到的事件会发到 Redis Pub/Sub，并按配置投递 Webhook / Telegram（[#3](https://github.com/bugman666/civic-alert-relay/issues/3)）。WebSocket 仍是占位，见 [#4](https://github.com/bugman666/civic-alert-relay/issues/4)。
 
 - [x] 最小可运行骨架（配置、健康检查、进程入口）
 - [x] USGS（或同类）拉取与去重（[#2](https://github.com/bugman666/civic-alert-relay/issues/2)）
-- [ ] Redis 扇出 + 至少一条出站通道（Webhook 或 Telegram）（[#3](https://github.com/bugman666/civic-alert-relay/issues/3)）
+- [x] Redis 扇出 + Webhook（可选 Telegram）（[#3](https://github.com/bugman666/civic-alert-relay/issues/3)）
 - [ ] WebSocket 事件流（[#4](https://github.com/bugman666/civic-alert-relay/issues/4)）
 - [ ] PostgreSQL 订阅与历史
 
@@ -30,7 +30,7 @@
 | 实时 | WebSocket | 长连接推送 |
 | 存储 | PostgreSQL | 订阅、事件历史、投递状态 |
 
-长连接与高频轮询需要常驻进程；灾害通知走内存队列扇出，适合跑在一台可长期在线的机器上。Compose 会一并拉起 Redis 和 PostgreSQL，方便后续接线；进程目前还不连它们（#3）。已见过的 USGS 事件 id 默认写在本地 JSON 文件里，避免重启后把同一条再发一遍。
+长连接与高频轮询需要常驻进程；灾害通知走 Redis Pub/Sub 扇出，适合跑在一台可长期在线的机器上。Compose 会一并拉起 Redis 和 PostgreSQL；进程会向 Redis 发规范化事件（`CAR_REDIS_URL` 为空则跳过）。PostgreSQL 仍留给订阅/历史。已见过的 USGS 事件 id 默认写在本地 JSON 文件里，避免重启后把同一条再发一遍。
 
 ## 如何运行
 
@@ -82,16 +82,17 @@ curl -sS http://127.0.0.1:8080/healthz
   "version": "0.1.0",
   "ingest": "ok",
   "normalize": "ok",
-  "fanout": "stub",
+  "fanout": "ok",
   "realtime": "stub"
 }
 ```
 
-`GET /` 返回服务名和路径。进程起来后会在后台按间隔拉 USGS，规范化后按 `usgs:<feed id>` 去重；首次见到的事件进入内存列表，并交给仍是占位的 fan-out（#3）。便于本地核对：
+`GET /` 返回服务名和路径。进程起来后会在后台按间隔拉 USGS，规范化后按 `usgs:<feed id>` 去重；首次见到的事件进入内存列表，再 JSON 发布到 Redis 频道（默认 `civic-alert-relay:events`），并对 `CAR_WEBHOOK_URL` 做 HTTP POST。同时配了 `CAR_TELEGRAM_BOT_TOKEN` 和 `CAR_TELEGRAM_CHAT_ID` 时，再发一条 Telegram 文本。某一项为空则跳过该通道，不中断拉取。WebSocket 仍留给 [#4](https://github.com/bugman666/civic-alert-relay/issues/4)。便于本地核对：
 
 ```bash
 curl -sS http://127.0.0.1:8080/events
 curl -sS http://127.0.0.1:8080/ingest/status
+curl -sS http://127.0.0.1:8080/fanout/status
 ```
 
 常用环境变量（覆盖 `configs/config.example.env`；也可复制为仓库根目录的 `.env`）：
@@ -107,20 +108,25 @@ curl -sS http://127.0.0.1:8080/ingest/status
 | `CAR_INGEST_INTERVAL_SECONDS` | 拉取间隔（秒） | `60` |
 | `CAR_SEEN_IDS_PATH` | 已见事件 id 持久化文件 | `/tmp/civic-alert-relay-seen.json` |
 | `CAR_RECENT_EVENT_LIMIT` | `/events` 内存条数上限 | `100` |
-| `CAR_REDIS_URL` | Redis（#3 才会真正连接） | `redis://127.0.0.1:6379/0` |
+| `CAR_REDIS_URL` | Redis 连接串；空则不发布 | `redis://127.0.0.1:6379/0` |
+| `CAR_REDIS_CHANNEL` | Pub/Sub 频道名 | `civic-alert-relay:events` |
+| `CAR_WEBHOOK_URL` | 出站 Webhook（HTTP POST JSON）；空则跳过 | （空） |
+| `CAR_WEBHOOK_TIMEOUT_SECONDS` | Webhook / Telegram HTTP 超时（秒） | `10` |
+| `CAR_TELEGRAM_BOT_TOKEN` | Telegram Bot token；与 chat id 都空则跳过 | （空） |
+| `CAR_TELEGRAM_CHAT_ID` | Telegram chat id | （空） |
 | `CAR_DATABASE_URL` | PostgreSQL（订阅/历史，尚未使用） | `postgresql://civic:civic@127.0.0.1:5432/civic_alert` |
 
 ## 仓库结构
 
 ```
-civic_alert_relay/   FastAPI 进程：配置、/healthz、USGS 拉取
+civic_alert_relay/   FastAPI 进程：配置、/healthz、USGS 拉取、扇出
   config.py          环境变量（CAR_*）
   ingest.py          后台轮询 USGS GeoJSON
   normalize.py       事件模型与按 id 去重
-  fanout.py          Redis 扇出 + 出站   #3
+  fanout.py          Redis Pub/Sub + Webhook / Telegram
   realtime.py        WebSocket 事件流    #4
 configs/             示例环境变量
-tests/               /healthz、规范化、去重（mock USGS）
+tests/               /healthz、规范化、去重、扇出（mock Redis / 本地 webhook）
 scripts/smoke.sh     拉起进程并打 /healthz
 Dockerfile
 docker-compose.yml
