@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     port: int = 8080
     log_level: str = "info"
 
+    # USGS GeoJSON ingest (#2). ``usgs_feed`` is a short name such as
+    # ``all_hour`` or ``significant_week``; ``usgs_feed_url`` overrides it.
+    ingest_enabled: bool = True
+    usgs_feed: str = "all_hour"
+    usgs_feed_url: str = ""
+    ingest_interval_seconds: int = 60
+    seen_ids_path: str = "/tmp/civic-alert-relay-seen.json"
+    recent_event_limit: int = 100
+
     # Reserved for #3 (Redis Pub/Sub fan-out). The process does not connect yet.
     redis_url: str = "redis://127.0.0.1:6379/0"
 

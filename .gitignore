@@ -9,3 +9,7 @@ dist/
 build/
 .env
 .DS_Store
+
+# local ingest state (seen USGS ids)
+seen_ids.json
+data/

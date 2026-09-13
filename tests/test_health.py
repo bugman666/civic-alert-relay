@@ -10,7 +10,13 @@ from civic_alert_relay.config import Settings
 
 
 def _client() -> TestClient:
-    settings = Settings(host="127.0.0.1", port=8080)
+    settings = Settings(
+        host="127.0.0.1",
+        port=8080,
+        ingest_enabled=False,
+        seen_ids_path="",
+        _env_file=None,
+    )
     return TestClient(create_app(settings))
 
 
@@ -22,8 +28,8 @@ def test_healthz_ok() -> None:
     assert body["status"] == "ok"
     assert body["service"] == "civic-alert-relay"
     assert body["version"] == __version__
-    assert body["ingest"] == "stub"
-    assert body["normalize"] == "stub"
+    assert body["ingest"] == "ok"
+    assert body["normalize"] == "ok"
     assert body["fanout"] == "stub"
     assert body["realtime"] == "stub"
 
@@ -35,3 +41,5 @@ def test_root_points_at_healthz() -> None:
     body = response.json()
     assert body["service"] == "civic-alert-relay"
     assert body["health"] == "/healthz"
+    assert body["events"] == "/events"
+    assert body["ingest"] == "/ingest/status"

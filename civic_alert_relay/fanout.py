@@ -25,3 +25,10 @@ def status() -> str:
     """Return the fan-out subsystem state for ``/healthz``."""
 
     return STATUS
+
+
+def publish(event: object) -> None:
+    """Receive a newly seen event. Issue #3 will publish it to Redis / channels."""
+
+    ident = getattr(event, "id", event)
+    log.debug("fanout: stub drop %s (see issue #3)", ident)
