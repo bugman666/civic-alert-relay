@@ -20,6 +20,7 @@ PORT="${CAR_SMOKE_PORT:-18080}"
 export CAR_HOST="127.0.0.1"
 export CAR_PORT="${PORT}"
 export CAR_LOG_LEVEL="info"
+export CAR_SEEN_IDS_PATH="${WORKDIR}/seen.json"
 
 "${RUN[@]}" >"${WORKDIR}/relay.log" 2>&1 &
 PID=$!

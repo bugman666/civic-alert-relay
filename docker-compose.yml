@@ -8,6 +8,9 @@ services:
     environment:
       CAR_HOST: "0.0.0.0"
       CAR_PORT: "8080"
+      CAR_USGS_FEED: "all_hour"
+      CAR_INGEST_INTERVAL_SECONDS: "60"
+      CAR_SEEN_IDS_PATH: "/tmp/civic-alert-relay-seen.json"
       CAR_REDIS_URL: "redis://redis:6379/0"
       CAR_DATABASE_URL: "postgresql://civic:civic@postgres:5432/civic_alert"
     depends_on:
