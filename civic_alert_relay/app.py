@@ -1,4 +1,4 @@
-"""HTTP front door: process health, ingest / fan-out status, and recent events."""
+"""HTTP front door: process health, ingest / fan-out status, recent events, and WebSocket."""
 
 from __future__ import annotations
 
@@ -6,13 +6,14 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.responses import JSONResponse
 
 from civic_alert_relay import __version__, fanout, ingest, normalize, realtime
 from civic_alert_relay.config import Settings, get_settings
 from civic_alert_relay.fanout import FanoutService
 from civic_alert_relay.ingest import IngestService
+from civic_alert_relay.realtime import EventHub, WS_PATH
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     normalize.log_ready()
     fanout.configure(app.state.fanout)
     fanout.log_ready(settings)
+    realtime.configure(app.state.realtime)
+    app.state.realtime.start()
     realtime.log_ready()
     app.state.fanout.start()
     await app.state.ingest.start()
@@ -35,6 +38,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.ingest.stop()
     app.state.fanout.stop()
     fanout.configure(None)
+    app.state.realtime.stop()
+    realtime.configure(None)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -54,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.ingest = IngestService(settings)
     app.state.fanout = FanoutService(settings)
+    app.state.realtime = EventHub()
 
     @app.get("/", include_in_schema=False)
     def root() -> JSONResponse:
@@ -65,6 +71,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "events": "/events",
                 "ingest": "/ingest/status",
                 "fanout": "/fanout/status",
+                "realtime": "/realtime/status",
+                "ws": WS_PATH,
                 "docs": "https://github.com/bugman666/civic-alert-relay",
             }
         )
@@ -95,6 +103,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/fanout/status", include_in_schema=False)
     def fanout_status() -> JSONResponse:
         return JSONResponse(app.state.fanout.snapshot())
+
+    @app.get("/realtime/status", include_in_schema=False)
+    def realtime_status() -> JSONResponse:
+        return JSONResponse(app.state.realtime.snapshot())
+
+    @app.websocket(WS_PATH)
+    async def ws_events(websocket: WebSocket) -> None:
+        await realtime.handle_client(websocket, app.state.realtime)
 
     return app
 

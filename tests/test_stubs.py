@@ -1,4 +1,4 @@
-"""WebSocket stays stubbed; ingest / normalize / fan-out are live."""
+"""Ingest / normalize / fan-out / realtime are all live."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ from civic_alert_relay import fanout, ingest, normalize, realtime
 from civic_alert_relay.config import Settings
 
 
-def test_status_after_fanout_slice() -> None:
+def test_status_after_realtime_and_fanout() -> None:
     assert ingest.status() == "ok"
     assert normalize.status() == "ok"
     assert fanout.status() == "ok"
-    assert realtime.status() == "stub"
+    assert realtime.status() == "ok"
 
 
 def test_log_ready_does_not_raise() -> None:

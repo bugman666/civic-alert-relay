@@ -13,12 +13,12 @@
 
 ## 当前状态
 
-进程能起来，[`GET /healthz`](#如何运行) 返回正常。已按 [#2](https://github.com/bugman666/civic-alert-relay/issues/2) 轮询 USGS 地震 GeoJSON、规范化并按事件 id 去重。首次见到的事件会发到 Redis Pub/Sub，并按配置投递 Webhook / Telegram（[#3](https://github.com/bugman666/civic-alert-relay/issues/3)）。WebSocket 仍是占位，见 [#4](https://github.com/bugman666/civic-alert-relay/issues/4)。
+进程能起来，[`GET /healthz`](#如何运行) 返回正常。已按 [#2](https://github.com/bugman666/civic-alert-relay/issues/2) 轮询 USGS 地震 GeoJSON、规范化并按事件 id 去重。首次见到的事件会发到 Redis Pub/Sub，并按配置投递 Webhook / Telegram（[#3](https://github.com/bugman666/civic-alert-relay/issues/3)），同时推到 WebSocket（[#4](https://github.com/bugman666/civic-alert-relay/issues/4)）。
 
 - [x] 最小可运行骨架（配置、健康检查、进程入口）
 - [x] USGS（或同类）拉取与去重（[#2](https://github.com/bugman666/civic-alert-relay/issues/2)）
 - [x] Redis 扇出 + Webhook（可选 Telegram）（[#3](https://github.com/bugman666/civic-alert-relay/issues/3)）
-- [ ] WebSocket 事件流（[#4](https://github.com/bugman666/civic-alert-relay/issues/4)）
+- [x] WebSocket 事件流（[#4](https://github.com/bugman666/civic-alert-relay/issues/4)）
 - [ ] PostgreSQL 订阅与历史
 
 ## 计划中的技术栈
@@ -83,17 +83,62 @@ curl -sS http://127.0.0.1:8080/healthz
   "ingest": "ok",
   "normalize": "ok",
   "fanout": "ok",
-  "realtime": "stub"
+  "realtime": "ok"
 }
 ```
 
-`GET /` 返回服务名和路径。进程起来后会在后台按间隔拉 USGS，规范化后按 `usgs:<feed id>` 去重；首次见到的事件进入内存列表，再 JSON 发布到 Redis 频道（默认 `civic-alert-relay:events`），并对 `CAR_WEBHOOK_URL` 做 HTTP POST。同时配了 `CAR_TELEGRAM_BOT_TOKEN` 和 `CAR_TELEGRAM_CHAT_ID` 时，再发一条 Telegram 文本。某一项为空则跳过该通道，不中断拉取。WebSocket 仍留给 [#4](https://github.com/bugman666/civic-alert-relay/issues/4)。便于本地核对：
+`GET /` 返回服务名和路径。进程起来后会在后台按间隔拉 USGS，规范化后按 `usgs:<feed id>` 去重；首次见到的事件进入内存列表，再 JSON 发布到 Redis 频道（默认 `civic-alert-relay:events`），并对 `CAR_WEBHOOK_URL` 做 HTTP POST，同时推到 [`/ws/events`](#websocket-事件流)。同时配了 `CAR_TELEGRAM_BOT_TOKEN` 和 `CAR_TELEGRAM_CHAT_ID` 时，再发一条 Telegram 文本。某一项为空则跳过该通道，不中断拉取。便于本地核对：
 
 ```bash
 curl -sS http://127.0.0.1:8080/events
 curl -sS http://127.0.0.1:8080/ingest/status
 curl -sS http://127.0.0.1:8080/fanout/status
+curl -sS http://127.0.0.1:8080/realtime/status
 ```
+
+## WebSocket 事件流
+
+看板或下游服务连 `ws://<host>:<port>/ws/events`（默认 `ws://127.0.0.1:8080/ws/events`）。连接后先收到一条 hello，之后每条**新入库**的规范化事件推一条 JSON。历史请用 `GET /events`；这条通道不重放已见过的 id。
+
+```bash
+# 任选其一
+websocat ws://127.0.0.1:8080/ws/events
+python3 - <<'PY'
+import asyncio, json
+import websockets
+
+async def main() -> None:
+    async with websockets.connect("ws://127.0.0.1:8080/ws/events") as ws:
+        print(json.loads(await ws.recv()))
+        print(json.loads(await ws.recv()))
+
+asyncio.run(main())
+PY
+```
+
+帧格式：
+
+```json
+{"type": "hello", "service": "civic-alert-relay", "path": "/ws/events"}
+```
+
+```json
+{
+  "type": "event",
+  "event": {
+    "id": "usgs:us6000abcd",
+    "source": "usgs",
+    "source_id": "us6000abcd",
+    "time": "2023-11-14T22:13:20Z",
+    "magnitude": 5.2,
+    "place": "10 km W of Example"
+  }
+}
+```
+
+`event` 字段与 `GET /events` 里单条记录相同。可同时开多个客户端，各自收到同一条推送。客户端发来的文本会被忽略（可当心跳）。慢客户端队列满时会丢掉该连接上的后续帧，不断开。
+
+`GET /realtime/status` 返回 `{"path":"/ws/events","clients":N}`。ingest 在交给 Redis / Webhook / Telegram 的同时，把同一条事件推进程内 Hub；WebSocket 不经过 Redis 再订阅回来。
 
 常用环境变量（覆盖 `configs/config.example.env`；也可复制为仓库根目录的 `.env`）：
 
@@ -119,14 +164,14 @@ curl -sS http://127.0.0.1:8080/fanout/status
 ## 仓库结构
 
 ```
-civic_alert_relay/   FastAPI 进程：配置、/healthz、USGS 拉取、扇出
+civic_alert_relay/   FastAPI 进程：配置、/healthz、USGS 拉取、扇出、/ws/events
   config.py          环境变量（CAR_*）
   ingest.py          后台轮询 USGS GeoJSON
   normalize.py       事件模型与按 id 去重
   fanout.py          Redis Pub/Sub + Webhook / Telegram
-  realtime.py        WebSocket 事件流    #4
+  realtime.py        WebSocket 事件流
 configs/             示例环境变量
-tests/               /healthz、规范化、去重、扇出（mock Redis / 本地 webhook）
+tests/               /healthz、规范化、去重、扇出、WebSocket（mock Redis / USGS）
 scripts/smoke.sh     拉起进程并打 /healthz
 Dockerfile
 docker-compose.yml
