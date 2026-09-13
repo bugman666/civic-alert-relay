@@ -1,2 +1,37 @@
-# civic-alert-relay
-Open civic hazard alerts: ingest USGS and similar feeds, fan out via WebPush, Telegram, and Webhooks
+# Civic Alert Relay
+
+聚合权威开放数据源里的地质与气象灾害信息（地震、海啸、极端天气等），再通过 WebPush、Telegram Bot、Webhook 等渠道尽快推给订阅方。
+
+面向需要「早知道、少漏报」的公众、社区志愿者和小型公民倡议组织。可自托管，不设付费墙。
+
+## 做什么
+
+1. **接入开放源**：例如 USGS 地震 feed，以及其他可公开获取的灾害/预警数据  
+2. **规范化事件**：统一成内部事件模型，便于去重与订阅过滤  
+3. **多渠道分发**：WebPush、Telegram Bot、Webhook；订阅方可按区域/震级等条件筛选  
+4. **实时出口**：WebSocket 长连接，方便看板或下游服务跟事件流
+
+## 计划中的技术栈
+
+| 层 | 选型 | 用途 |
+|----|------|------|
+| 服务 | Python 或 Node.js | 拉取、规范化、API |
+| 队列 | Redis Pub/Sub | 低延迟扇出 |
+| 实时 | WebSocket | 长连接推送 |
+| 存储 | PostgreSQL | 订阅、事件历史、投递状态 |
+
+长连接与高频轮询需要常驻进程；灾害通知走内存队列扇出，适合跑在一台可长期在线的机器上。
+
+## 当前状态
+
+仓库刚建好，代码与部署说明随后补。下一批工作大致是：
+
+- [ ] 最小可运行骨架（配置、健康检查、进程入口）  
+- [ ] USGS（或同类）拉取与去重  
+- [ ] Redis 扇出 + 至少一条出站通道（Webhook 或 Telegram）  
+- [ ] WebSocket 事件流  
+- [ ] PostgreSQL 订阅与历史  
+
+## License
+
+待定（倾向 MIT 或 Apache-2.0）。
