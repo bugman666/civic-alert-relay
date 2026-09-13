@@ -15,6 +15,8 @@ def _client() -> TestClient:
         port=8080,
         ingest_enabled=False,
         seen_ids_path="",
+        redis_url="",
+        webhook_url="",
         _env_file=None,
     )
     return TestClient(create_app(settings))
@@ -30,7 +32,7 @@ def test_healthz_ok() -> None:
     assert body["version"] == __version__
     assert body["ingest"] == "ok"
     assert body["normalize"] == "ok"
-    assert body["fanout"] == "stub"
+    assert body["fanout"] == "ok"
     assert body["realtime"] == "stub"
 
 
@@ -43,3 +45,4 @@ def test_root_points_at_healthz() -> None:
     assert body["health"] == "/healthz"
     assert body["events"] == "/events"
     assert body["ingest"] == "/ingest/status"
+    assert body["fanout"] == "/fanout/status"

@@ -113,7 +113,7 @@ class IngestService:
         }
 
     def accept(self, events: list[HazardEvent]) -> list[HazardEvent]:
-        """Dedupe, keep first-seen items, and hand them to the fan-out stub."""
+        """Dedupe, keep first-seen items, and hand them to fan-out."""
 
         emitted = select_new(events, self.seen)
         for event in emitted:

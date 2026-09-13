@@ -21,6 +21,10 @@ export CAR_HOST="127.0.0.1"
 export CAR_PORT="${PORT}"
 export CAR_LOG_LEVEL="info"
 export CAR_SEEN_IDS_PATH="${WORKDIR}/seen.json"
+export CAR_REDIS_URL=""
+export CAR_WEBHOOK_URL=""
+export CAR_TELEGRAM_BOT_TOKEN=""
+export CAR_TELEGRAM_CHAT_ID=""
 
 "${RUN[@]}" >"${WORKDIR}/relay.log" 2>&1 &
 PID=$!
